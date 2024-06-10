@@ -105,3 +105,4 @@ GitHub action are as follows:
 | `token`                         | True     | String   | GitHub access token. Must be set to `${{secrets.GITHUB_TOKEN}}` or appropriate personal access token variable reference. |
 | `trainingportal-resource-file`  | False    | String   | Relative path under workshop directory to the `TrainingPortal` resource file. Defaults to "`resources/trainingportal.yaml`". |
 | `workshop-resource-file`        | False    | String   | Relative path under workshop directory to the `Workshop` resource file. Defaults to "`resources/workshop.yaml`". |
+| `educates-version`              | False    | String   | Version of the Educates CLI to be used within the Action. Defaults to "`2.7.1`". |
