@@ -17,6 +17,10 @@ inputs:
     description: "Relative path under workshop directory to the TrainingPortal resource file."
     required: false
     default: 'resources/trainingportal.yaml'
+  educates-version:
+    description: "Version of the Educates CLI to be used within the Action"
+    required: false
+    default: '2.7.1'
 
 runs:
   using: composite
@@ -29,9 +33,9 @@ runs:
     - name: Install Educates CLI
       shell: bash
       run: |
-        # curl -Lo /usr/local/bin/educates https://github.com/vmware-tanzu-labs/educates-training-platform/releases/download/2.6.0/educates-linux-amd64
+        # curl -Lo /usr/local/bin/educates https://github.com/vmware-tanzu-labs/educates-training-platform/releases/download/${{inputs.educates-version}}/educates-linux-amd64
         # chmod +x /usr/local/bin/educates
-        imgpkg pull -i ghcr.io/vmware-tanzu-labs/educates-client-programs:2.6.0 -o /tmp/client-programs
+        imgpkg pull -i ghcr.io/vmware-tanzu-labs/educates-client-programs:${{inputs.educates-version}} -o /tmp/client-programs
         mv /tmp/client-programs/educates-linux-amd64 /usr/local/bin/educates
 
     - name: Calculate release variables
@@ -45,7 +49,7 @@ runs:
 
     - name: Publish workshop and create workshop definition
       shell: bash
-      run : |
+      run: |
         mkdir -p ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources
         educates publish-workshop '${{inputs.path}}' \
           --workshop-file '${{inputs.workshop-resource-file}}' \
