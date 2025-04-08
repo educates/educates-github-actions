@@ -23,7 +23,7 @@ GitHub Workflow
 The name of the GitHub action is:
 
 ```
-vmware-tanzu-labs/educates-github-actions/publish-workshop
+educates/educates-github-actions/publish-workshop
 ```
 
 To have an Educates workshop published upon the repository being tagged as
@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Create release
-        uses: vmware-tanzu-labs/educates-github-actions/publish-workshop@v6
+        uses: educates/educates-github-actions/publish-workshop@v6
         with:
           token: ${{secrets.GITHUB_TOKEN}}
 ```
