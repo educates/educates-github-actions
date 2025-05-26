@@ -1,3 +1,4 @@
+cat publish-any-workshop/action.yaml
 name: Workshop Publisher
 description: Publish a single Educates workshop to GitHub Container Registry.
 
@@ -6,9 +7,13 @@ inputs:
     description: "GitHub access token."
     required: true
   path:
-    description: "Relative directory path under $GITHUB_WORKSPACE to workshop files."
+    description: "Relative directory path under $GITHUB_WORKSPACE to workshop files or collection of workshops. (., ./workshops)"
     required: false
     default: '.'
+  multiple-workshops:
+    description: "If true, publish all workshop files in the workshop directory."
+    required: false
+    default: 'false'
   workshop-resource-file:
     description: "Relative path under workshop directory to the Workshop resource file."
     required: false
@@ -29,7 +34,7 @@ runs:
     - name: Install Educates CLI
       shell: bash
       run: |
-        imgpkg pull -i ghcr.io/educates/educates-client-programs:3.2.2 -o /tmp/client-programs
+        imgpkg pull -i ghcr.io/educates/educates-client-programs:3.3.2 -o /tmp/client-programs
         mv /tmp/client-programs/educates-linux-amd64 /usr/local/bin/educates
 
     - name: Calculate release variables
@@ -40,29 +45,49 @@ runs:
         echo "REPOSITORY_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
         echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
         echo "GITHUB_TOKEN=${{inputs.token}}" >>${GITHUB_ENV}
+        echo "WORKSHOPS_DEST_PATH=${{runner.temp}}/workshops/resources" >>${GITHUB_ENV}
 
-    - name: Publish workshop and create workshop definition
+    - name: Publish workshop content as OCI image and create workshop definition
       shell: bash
       run : |
-        mkdir -p ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources
-        educates publish-workshop '${{inputs.path}}' \
-          --workshop-file '${{inputs.workshop-resource-file}}' \
-          --export-workshop ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources/workshop.yaml \
-          --image-repository=ghcr.io/${REPOSITORY_OWNER} \
-          --workshop-version=${REPOSITORY_TAG} \
-          --registry-username=${{github.actor}} \
-          --registry-password=${{env.GITHUB_TOKEN}}
+        mkdir -p ${{env.WORKSHOPS_DEST_PATH}}
+        if [ "${{inputs.multiple-workshops}}" = "false" ]; then
+          educates publish-workshop '${{inputs.path}}' \
+            --workshop-file '${{inputs.workshop-resource-file}}' \
+            --export-workshop ${{env.WORKSHOPS_DEST_PATH}}/workshop.yaml \
+            --image-repository=ghcr.io/${REPOSITORY_OWNER} \
+            --workshop-version=${REPOSITORY_TAG} \
+            --registry-username=${{github.actor}} \
+            --registry-password=${{env.GITHUB_TOKEN}}
+        else
+          for WORKSHOP_NAME in `ls ${{inputs.path}}`; do
+            echo "Publishing workshop: ${WORKSHOP_NAME}"
+            educates publish-workshop "${{inputs.path}}/${WORKSHOP_NAME}" \
+              --export-workshop ${{env.WORKSHOPS_DEST_PATH}}/${WORKSHOP_NAME}.yaml \
+              --image-repository=ghcr.io/${REPOSITORY_OWNER} \
+              --workshop-version=${REPOSITORY_TAG} \
+              --registry-username=${{github.actor}} \
+              --registry-password=${{env.GITHUB_TOKEN}}
+          done
+        fi
 
     - name: Generate archives containing the workshop definition
       shell: bash
       run: |
-        (cd ${{runner.temp}}; tar cvfz workshops.tar.gz workshops)
-        (cd ${{runner.temp}}; zip workshops.zip -r workshops)
+        ytt -f ${{env.WORKSHOPS_DEST_PATH}} > ${{runner.temp}}/workshops.yaml
+        (cd ${{runner.temp}}; tar cvfz workshops.tar.gz workshops.yaml)
+        (cd ${{runner.temp}}; zip workshops.zip workshops.yaml)
 
     - uses: actions/upload-artifact@v4
       with:
-        name: workshop.yaml
-        path: ${{runner.temp}}/workshops/${{env.REPOSITORY_NAME}}/resources/workshop.yaml
+        name: workshops.yaml
+        path: ${{runner.temp}}/workshops.yaml
+
+    - uses: actions/upload-artifact@v4
+      if: inputs.multiple-workshops == 'true'
+      with:
+        name: workshops
+        path: ${{env.WORKSHOPS_DEST_PATH}}/*.yaml
 
     - uses: actions/upload-artifact@v4
       with:
@@ -89,5 +114,7 @@ runs:
         files: |
           ${{runner.temp}}/workshops.tar.gz
           ${{runner.temp}}/workshops.zip
-          ${{runner.temp}}/workshops/${{env.REPOSITORY_NAME}}/resources/workshop.yaml
+          ${{runner.temp}}/workshop.yaml
+          ${{runner.temp}}/workshops.yaml
           ${{inputs.path}}/${{inputs.trainingportal-resource-file}}
+          ${{env.WORKSHOPS_DEST_PATH}}/*.yaml
