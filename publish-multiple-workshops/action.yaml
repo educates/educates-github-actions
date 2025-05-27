@@ -1,0 +1,109 @@
+name: Multiple Workshops Publisher
+description: Publish a collection of Educates workshops to GitHub Container Registry.
+
+inputs:
+  token:
+    description: "GitHub access token."
+    required: true
+  path:
+    description: "Relative directory path under $GITHUB_WORKSPACE to the collection of workshops."
+    required: false
+    default: 'workshops'
+  workshop-resource-file:
+    description: "Relative path under workshop directory to the workshops resource file. All workshops must have same directory structure."
+    required: false
+    default: 'resources/workshop.yaml'
+  trainingportal-resource-file:
+    description: "Relative path under $GITHUB_WORKSPACE directory to the TrainingPortal resource file."
+    required: false
+    default: 'resources/trainingportal.yaml'
+
+permissions:
+  contents: read
+  packages: write
+
+runs:
+  using: composite
+
+  steps:
+    - name: Install Carvel tools
+      shell: bash
+      run: curl -L https://carvel.dev/install.sh | bash
+
+    - name: Install Educates CLI
+      shell: bash
+      run: |
+        imgpkg pull -i ghcr.io/educates/educates-client-programs:3.3.2 -o /tmp/client-programs
+        mv /tmp/client-programs/educates-linux-amd64 /usr/local/bin/educates
+
+    - name: Calculate release variables
+      shell: bash
+      run: |
+        REPOSITORY_NAME=${{github.event.repository.name}}
+        echo "REPOSITORY_NAME=${REPOSITORY_NAME,,}" >>${GITHUB_ENV}
+        echo "REPOSITORY_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
+        echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
+        echo "GITHUB_TOKEN=${{inputs.token}}" >>${GITHUB_ENV}
+
+    - name: Publish workshop content as OCI image and create workshop definition
+      shell: bash
+      run : |
+        mkdir -p ${{runner.temp}}/release
+        for WORKSHOP_NAME in `ls ${{inputs.path}}`; do
+          mkdir -p ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources
+          echo "Publishing workshop: ${WORKSHOP_NAME}"
+          educates publish-workshop ${{inputs.path}}/${WORKSHOP_NAME} \
+            --export-workshop ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources/workshop.yaml \
+            --image-repository=ghcr.io/${{env.REPOSITORY_OWNER}} \
+            --workshop-version=${{env.REPOSITORY_TAG}} \
+            --registry-username=${{github.actor}} \
+            --registry-password=${{env.GITHUB_TOKEN}}
+          echo "Make a releasable copy of the workshop definition"
+          cp ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources/workshop.yaml ${{runner.temp}}/release/${WORKSHOP_NAME}.yaml
+        done
+
+    - name: Generate archives containing the workshop definition
+      shell: bash
+      run: |
+        ytt -f ${{runner.temp}}/workshops > ${{runner.temp}}/workshops.yaml
+        (cd ${{runner.temp}}; tar cvfz workshops.tar.gz workshops)
+        (cd ${{runner.temp}}; zip workshops.zip -r workshops)
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: individual-workshops
+        path: ${{runner.temp}}/release/*.yaml
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: workshops.yaml
+        path: ${{runner.temp}}/workshops.yaml
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: workshops.tar.gz
+        path: ${{runner.temp}}/workshops.tar.gz
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: workshops.zip
+        path: ${{runner.temp}}/workshops.zip
+
+    - name: Create the GitHub release for the workshop
+      id: create_release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{env.GITHUB_TOKEN}}
+      with:
+        tag_name: ${{env.REPOSITORY_TAG}}
+        name: "${{env.REPOSITORY_NAME}}:${{env.REPOSITORY_TAG}}"
+        draft: false
+        prerelease: false
+        fail_on_unmatched_files: false
+        files: |
+          ${{runner.temp}}/workshops.tar.gz
+          ${{runner.temp}}/workshops.zip
+          ${{runner.temp}}/workshops.yaml
+          ${{inputs.path}}/${{inputs.trainingportal-resource-file}}
+          ${{runner.temp}}/release/*.yaml
