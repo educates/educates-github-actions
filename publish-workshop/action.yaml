@@ -29,7 +29,7 @@ runs:
     - name: Install Educates CLI
       shell: bash
       run: |
-        imgpkg pull -i ghcr.io/educates/educates-client-programs:3.2.2 -o /tmp/client-programs
+        imgpkg pull -i ghcr.io/educates/educates-client-programs:3.3.2 -o /tmp/client-programs
         mv /tmp/client-programs/educates-linux-amd64 /usr/local/bin/educates
 
     - name: Calculate release variables

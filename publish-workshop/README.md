@@ -46,12 +46,12 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Create release
-        uses: educates/educates-github-actions/publish-workshop@v6
+        uses: educates/educates-github-actions/publish-workshop@v7
         with:
           token: ${{secrets.GITHUB_TOKEN}}
 ```
 
-Note that version `v6` of this GitHub action produces an exported workshop
+Note that version `v6` and later of this GitHub action produces an exported workshop
 definition which requires Educates 2.6.0 or later.
 
 Workshop Definition
