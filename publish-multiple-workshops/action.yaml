@@ -1,22 +1,26 @@
-name: Workshop Publisher
-description: Publish a single Educates workshop to GitHub Container Registry.
+name: Multiple Workshops Publisher
+description: Publish a collection of Educates workshops to GitHub Container Registry.
 
 inputs:
   token:
     description: "GitHub access token."
     required: true
   path:
-    description: "Relative directory path under $GITHUB_WORKSPACE to workshop files."
+    description: "Relative directory path under $GITHUB_WORKSPACE to the collection of workshops."
     required: false
-    default: '.'
+    default: 'workshops'
   workshop-resource-file:
-    description: "Relative path under workshop directory to the Workshop resource file."
+    description: "Relative path under workshop directory to the workshops resource file. All workshops must have same directory structure."
     required: false
     default: 'resources/workshop.yaml'
   trainingportal-resource-file:
-    description: "Relative path under workshop directory to the TrainingPortal resource file."
+    description: "Relative path under $GITHUB_WORKSPACE directory to the TrainingPortal resource file."
     required: false
     default: 'resources/trainingportal.yaml'
+
+permissions:
+  contents: read
+  packages: write
 
 runs:
   using: composite
@@ -41,28 +45,39 @@ runs:
         echo "REPOSITORY_TAG=${GITHUB_REF##*/}" >>${GITHUB_ENV}
         echo "GITHUB_TOKEN=${{inputs.token}}" >>${GITHUB_ENV}
 
-    - name: Publish workshop and create workshop definition
+    - name: Publish workshop content as OCI image and create workshop definition
       shell: bash
       run : |
-        mkdir -p ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources
-        educates publish-workshop '${{inputs.path}}' \
-          --workshop-file '${{inputs.workshop-resource-file}}' \
-          --export-workshop ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources/workshop.yaml \
-          --image-repository=ghcr.io/${REPOSITORY_OWNER} \
-          --workshop-version=${REPOSITORY_TAG} \
-          --registry-username=${{github.actor}} \
-          --registry-password=${{env.GITHUB_TOKEN}}
+        mkdir -p ${{runner.temp}}/release
+        for WORKSHOP_NAME in `ls ${{inputs.path}}`; do
+          mkdir -p ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources
+          echo "Publishing workshop: ${WORKSHOP_NAME}"
+          educates publish-workshop ${{inputs.path}}/${WORKSHOP_NAME} \
+            --export-workshop ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources/workshop.yaml \
+            --image-repository=ghcr.io/${{env.REPOSITORY_OWNER}} \
+            --workshop-version=${{env.REPOSITORY_TAG}} \
+            --registry-username=${{github.actor}} \
+            --registry-password=${{env.GITHUB_TOKEN}}
+          echo "Make a releasable copy of the workshop definition"
+          cp ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources/workshop.yaml ${{runner.temp}}/release/${WORKSHOP_NAME}.yaml
+        done
 
     - name: Generate archives containing the workshop definition
       shell: bash
       run: |
+        ytt -f ${{runner.temp}}/workshops > ${{runner.temp}}/workshops.yaml
         (cd ${{runner.temp}}; tar cvfz workshops.tar.gz workshops)
         (cd ${{runner.temp}}; zip workshops.zip -r workshops)
 
     - uses: actions/upload-artifact@v4
       with:
-        name: workshop.yaml
-        path: ${{runner.temp}}/workshops/${{env.REPOSITORY_NAME}}/resources/workshop.yaml
+        name: individual-workshops
+        path: ${{runner.temp}}/release/*.yaml
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: workshops.yaml
+        path: ${{runner.temp}}/workshops.yaml
 
     - uses: actions/upload-artifact@v4
       with:
@@ -89,5 +104,6 @@ runs:
         files: |
           ${{runner.temp}}/workshops.tar.gz
           ${{runner.temp}}/workshops.zip
-          ${{runner.temp}}/workshops/${{env.REPOSITORY_NAME}}/resources/workshop.yaml
+          ${{runner.temp}}/workshops.yaml
           ${{inputs.path}}/${{inputs.trainingportal-resource-file}}
+          ${{runner.temp}}/release/*.yaml
