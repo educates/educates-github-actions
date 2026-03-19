@@ -114,9 +114,11 @@ runs:
 
         echo "Published ${published} workshop(s)."
 
-        # If the trainingportal resource file is available, copy it to the release directory
-        # else, this will fail the job
-        cp "${{inputs.trainingportal-resource-file}}" ${{runner.temp}}/release/trainingportal.yaml
+        if [[ -f "${{inputs.trainingportal-resource-file}}" ]]; then
+          cp "${{inputs.trainingportal-resource-file}}" ${{runner.temp}}/release/trainingportal.yaml
+        else
+          echo "::warning::TrainingPortal resource file '${{inputs.trainingportal-resource-file}}' not found. Skipping."
+        fi
 
     - name: Generate archives containing the workshop definition
       shell: bash
@@ -164,7 +166,7 @@ runs:
         name: "${{env.REPOSITORY_NAME}}:${{env.REPOSITORY_TAG}}"
         draft: false
         prerelease: false
-        fail_on_unmatched_files: true
+        fail_on_unmatched_files: false
         files: |
           ${{runner.temp}}/workshops.tar.gz
           ${{runner.temp}}/workshops.zip
