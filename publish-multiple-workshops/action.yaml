@@ -91,6 +91,7 @@ runs:
           docker run --rm \
             -v ${{github.workspace}}:/workspace \
             -v ${{runner.temp}}:/tmp/output \
+            -v /etc/ssl/certs:/etc/ssl/certs:ro \
             ghcr.io/educates/educates-cli:3.6.1 publish-workshop /workspace/${WORKSHOP_DIR} \
               --workshop-file '${{inputs.workshop-resource-file}}' \
               --export-workshop /tmp/output/workshops/${WORKSHOP_NAME}/resources/workshop.yaml \
