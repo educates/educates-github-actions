@@ -54,12 +54,14 @@ runs:
 
           patterns="${patterns//,/ }"
           patterns="${patterns//$'\n'/ }"
+          set -f  # disable pathname expansion to preserve glob patterns
           for pattern in ${patterns}; do
             [[ -z "${pattern}" ]] && continue
             case "${value}" in
               ${pattern}) return 0 ;;
             esac
           done
+          set +f
 
           return 1
         }
