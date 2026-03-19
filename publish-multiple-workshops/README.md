@@ -140,5 +140,40 @@ GitHub action are as follows:
 |---------------------------------|----------|----------|------------------------------------|
 | `path`                          | False    | String   | Relative directory path under `$GITHUB_WORKSPACE` to the collection of workshops. Defaults to "`workshops`". |
 | `token`                         | True     | String   | GitHub access token. Must be set to `${{secrets.GITHUB_TOKEN}}` or appropriate personal access token variable reference. |
+| `include`                       | False    | String   | Optional list of workshop directory names/patterns to include (one per line, or comma/space separated; supports glob patterns like "`lab-*`"). If empty, all workshops are included. |
+| `exclude`                       | False    | String   | Optional list of workshop directory names/patterns to exclude (one per line, or comma/space separated; supports glob patterns like "`lab-*`"). Applied after include. |
 | `trainingportal-resource-file`  | False    | String   | Relative path under `$GITHUB_WORKSPACE` to the `TrainingPortal` resource file. Defaults to "`resources/trainingportal.yaml`". |
 | `workshop-resource-file`        | False    | String   | Relative path under workshop directory to the `Workshop` resource file. Defaults to "`resources/workshop.yaml`". Every workshop must have same directory structure. |
+
+Filtering workshops
+-------------------
+
+Use `include` and/or `exclude` to filter which workshop directories under `path` are published.
+
+Examples:
+
+```yaml
+- name: Create release (only publish lab-* workshops)
+  uses: educates/educates-github-actions/publish-multiple-workshops@v7
+  with:
+    token: ${{secrets.GITHUB_TOKEN}}
+    include: lab-*
+```
+
+```yaml
+- name: Create release (publish all except some, comma separated)
+  uses: educates/educates-github-actions/publish-multiple-workshops@v7
+  with:
+    token: ${{secrets.GITHUB_TOKEN}}
+    exclude: "lab-examiner-scripts, lab-docker-runtime"
+```
+
+```yaml
+- name: Create release (publish all except some, multiline)
+  uses: educates/educates-github-actions/publish-multiple-workshops@v7
+  with:
+    token: ${{secrets.GITHUB_TOKEN}}
+    exclude: |
+      lab-examiner-scripts
+      lab-docker-runtime
+```

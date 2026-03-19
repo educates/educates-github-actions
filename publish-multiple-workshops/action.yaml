@@ -9,6 +9,14 @@ inputs:
     description: "Relative directory path under $GITHUB_WORKSPACE to the collection of workshops."
     required: false
     default: 'workshops'
+  include:
+    description: "Optional list of workshop directory names/patterns to include (one per line, or comma/space separated; supports glob patterns like 'lab-*'). If empty, all workshops are included."
+    required: false
+    default: ''
+  exclude:
+    description: "Optional list of workshop directory names/patterns to exclude (one per line, or comma/space separated; supports glob patterns like 'lab-*'). Applied after include."
+    required: false
+    default: ''
   workshop-resource-file:
     description: "Relative path under workshop directory to the workshops resource file. All workshops must have same directory structure."
     required: false
@@ -26,16 +34,6 @@ runs:
   using: composite
 
   steps:
-    - name: Install Carvel tools
-      shell: bash
-      run: curl -L https://carvel.dev/install.sh | bash
-
-    - name: Install Educates CLI
-      shell: bash
-      run: |
-        imgpkg pull -i ghcr.io/educates/educates-client-programs:3.3.2 -o /tmp/client-programs
-        mv /tmp/client-programs/educates-linux-amd64 /usr/local/bin/educates
-
     - name: Calculate release variables
       shell: bash
       run: |
@@ -47,44 +45,107 @@ runs:
 
     - name: Publish workshop content as OCI image and create workshop definition
       shell: bash
-      run : |
+      run: |
+        matches_any_pattern() {
+          local value="$1"
+          local patterns="$2"
+
+          [[ -z "${patterns}" ]] && return 1
+
+          patterns="${patterns//,/ }"
+          patterns="${patterns//$'\n'/ }"
+          for pattern in ${patterns}; do
+            [[ -z "${pattern}" ]] && continue
+            case "${value}" in
+              ${pattern}) return 0 ;;
+            esac
+          done
+
+          return 1
+        }
+
+        WORKSHOPS_ROOT="${{inputs.path}}"
+
         mkdir -p ${{runner.temp}}/release
-        for WORKSHOP_NAME in `ls ${{inputs.path}}`; do
+
+        published=0
+
+        shopt -s nullglob
+        for WORKSHOP_DIR in "${WORKSHOPS_ROOT}"/*; do
+          [[ -d "${WORKSHOP_DIR}" ]] || continue
+
+          WORKSHOP_NAME="$(basename "${WORKSHOP_DIR}")"
+
+          if [[ -n "${{inputs.include}}" ]] && ! matches_any_pattern "${WORKSHOP_NAME}" "${{inputs.include}}"; then
+            echo "Skipping workshop (not included): ${WORKSHOP_NAME}"
+            continue
+          fi
+
+          if matches_any_pattern "${WORKSHOP_NAME}" "${{inputs.exclude}}"; then
+            echo "Skipping workshop (excluded): ${WORKSHOP_NAME}"
+            continue
+          fi
+
           mkdir -p ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources
           echo "Publishing workshop: ${WORKSHOP_NAME}"
-          educates publish-workshop ${{inputs.path}}/${WORKSHOP_NAME} \
-            --export-workshop ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources/workshop.yaml \
-            --image-repository=ghcr.io/${{env.REPOSITORY_OWNER}} \
-            --workshop-version=${{env.REPOSITORY_TAG}} \
-            --registry-username=${{github.actor}} \
-            --registry-password=${{env.GITHUB_TOKEN}}
+          docker run --rm \
+            -v ${{github.workspace}}:/workspace \
+            -v ${{runner.temp}}:/tmp/output \
+            ghcr.io/educates/educates-cli:3.6.1 publish-workshop /workspace/${WORKSHOP_DIR} \
+              --workshop-file '${{inputs.workshop-resource-file}}' \
+              --export-workshop /tmp/output/workshops/${WORKSHOP_NAME}/resources/workshop.yaml \
+              --image-repository=ghcr.io/${{env.REPOSITORY_OWNER}} \
+              --workshop-version=${{env.REPOSITORY_TAG}} \
+              --registry-username=${{github.actor}} \
+              --registry-password=${{env.GITHUB_TOKEN}}
           echo "Make a releasable copy of the workshop definition"
           cp ${{runner.temp}}/workshops/${WORKSHOP_NAME}/resources/workshop.yaml ${{runner.temp}}/release/${WORKSHOP_NAME}.yaml
+
+          published=$((published + 1))
         done
+
+        if [[ ${published} -eq 0 ]]; then
+          echo "No workshops matched include/exclude filters under '${WORKSHOPS_ROOT}'."
+          exit 1
+        fi
+
+        echo "Published ${published} workshop(s)."
+
+        # If the trainingportal resource file is available, copy it to the release directory
+        # else, this will fail the job
+        cp "${{inputs.trainingportal-resource-file}}" ${{runner.temp}}/release/trainingportal.yaml
 
     - name: Generate archives containing the workshop definition
       shell: bash
       run: |
-        ytt -f ${{runner.temp}}/workshops > ${{runner.temp}}/workshops.yaml
+        first=true
+        for f in ${{runner.temp}}/workshops/*/resources/workshop.yaml; do
+          if [ "$first" = true ]; then
+            first=false
+          else
+            echo "---"
+          fi
+          cat "$f"
+        done > ${{runner.temp}}/workshops.yaml
         (cd ${{runner.temp}}; tar cvfz workshops.tar.gz workshops)
         (cd ${{runner.temp}}; zip workshops.zip -r workshops)
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: individual-workshops
         path: ${{runner.temp}}/release/*.yaml
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: workshops.yaml
         path: ${{runner.temp}}/workshops.yaml
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: workshops.tar.gz
         path: ${{runner.temp}}/workshops.tar.gz
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: workshops.zip
         path: ${{runner.temp}}/workshops.zip
@@ -100,10 +161,9 @@ runs:
         name: "${{env.REPOSITORY_NAME}}:${{env.REPOSITORY_TAG}}"
         draft: false
         prerelease: false
-        fail_on_unmatched_files: false
+        fail_on_unmatched_files: true
         files: |
           ${{runner.temp}}/workshops.tar.gz
           ${{runner.temp}}/workshops.zip
           ${{runner.temp}}/workshops.yaml
-          ${{inputs.path}}/${{inputs.trainingportal-resource-file}}
           ${{runner.temp}}/release/*.yaml
