@@ -141,7 +141,7 @@ GitHub action are as follows:
 | `path`                          | False    | String   | Relative directory path under `$GITHUB_WORKSPACE` to the collection of workshops. Defaults to "`workshops`". |
 | `token`                         | True     | String   | GitHub access token. Must be set to `${{secrets.GITHUB_TOKEN}}` or appropriate personal access token variable reference. |
 | `include`                       | False    | String   | Optional list of workshop directory names/patterns to include (one per line, or comma/space separated; supports glob patterns like "`lab-*`"). If empty, all workshops are included. |
-| `exclude`                       | False    | String   | Optional list of workshop directory names/patterns to exclude (one per line, or comma/space separated; supports glob patterns like "`lab-*`"). Applied after include. |
+| `exclude`                       | False    | String   | Optional list of workshop directory names/patterns to exclude (one per line, or comma/space separated; supports glob patterns like "`lab-*`"). `include` takes precedence over `exclude` on a per-workshop basis. |
 | `trainingportal-resource-file`  | False    | String   | Relative path under `$GITHUB_WORKSPACE` to the `TrainingPortal` resource file. Defaults to "`resources/trainingportal.yaml`". |
 | `workshop-resource-file`        | False    | String   | Relative path under workshop directory to the `Workshop` resource file. Defaults to "`resources/workshop.yaml`". Every workshop must have same directory structure. |
 
@@ -149,6 +149,8 @@ Filtering workshops
 -------------------
 
 Use `include` and/or `exclude` to filter which workshop directories under `path` are published.
+
+When both `include` and `exclude` are specified, `include` takes precedence on a per-workshop basis: any workshop that matches an `include` pattern is published regardless of `exclude` rules. The `exclude` rules only apply to workshops that are not explicitly included.
 
 Examples:
 
@@ -176,4 +178,15 @@ Examples:
     exclude: |
       lab-examiner-scripts
       lab-docker-runtime
+```
+
+```yaml
+- name: Create release (include takes precedence over exclude)
+  uses: educates/educates-github-actions/publish-multiple-workshops@v7
+  with:
+    token: ${{secrets.GITHUB_TOKEN}}
+    include: |
+      lab-builtin-vcluster
+      lab-command-*
+    exclude: lab-*
 ```

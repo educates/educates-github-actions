@@ -78,12 +78,12 @@ runs:
 
           WORKSHOP_NAME="$(basename "${WORKSHOP_DIR}")"
 
-          if [[ -n "${{inputs.include}}" ]] && ! matches_any_pattern "${WORKSHOP_NAME}" "${{inputs.include}}"; then
+          if [[ -n "${{inputs.include}}" ]] && matches_any_pattern "${WORKSHOP_NAME}" "${{inputs.include}}"; then
+            echo "Workshop explicitly included: ${WORKSHOP_NAME}"
+          elif [[ -n "${{inputs.include}}" ]]; then
             echo "Skipping workshop (not included): ${WORKSHOP_NAME}"
             continue
-          fi
-
-          if matches_any_pattern "${WORKSHOP_NAME}" "${{inputs.exclude}}"; then
+          elif matches_any_pattern "${WORKSHOP_NAME}" "${{inputs.exclude}}"; then
             echo "Skipping workshop (excluded): ${WORKSHOP_NAME}"
             continue
           fi
