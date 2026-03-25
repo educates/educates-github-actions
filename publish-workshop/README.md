@@ -105,3 +105,14 @@ GitHub action are as follows:
 | `token`                         | True     | String   | GitHub access token. Must be set to `${{secrets.GITHUB_TOKEN}}` or appropriate personal access token variable reference. |
 | `trainingportal-resource-file`  | False    | String   | Relative path under workshop directory to the `TrainingPortal` resource file. Defaults to "`resources/trainingportal.yaml`". |
 | `workshop-resource-file`        | False    | String   | Relative path under workshop directory to the `Workshop` resource file. Defaults to "`resources/workshop.yaml`". |
+
+Permissions
+-----------
+
+This action requires the following `GITHUB_TOKEN` permissions:
+
+```yaml
+permissions:
+  contents: write   # To create/update GitHub releases
+  packages: write   # To push OCI image artifacts to GHCR
+```

@@ -190,3 +190,14 @@ Examples:
       lab-command-*
     exclude: lab-*
 ```
+
+Permissions
+-----------
+
+This action requires the following `GITHUB_TOKEN` permissions:
+
+```yaml
+permissions:
+  contents: write   # To create/update GitHub releases
+  packages: write   # To push OCI image artifacts to GHCR
+```
