@@ -17,3 +17,14 @@ The GitHub actions included here are:
 Note that versioning applies to the collection as a whole. This means that if a
 breaking change is made to a single action, then the version is incremented on
 all actions, even though changes may not have been made to the other actions.
+
+Permissions
+-----------
+
+These actions requires the following `GITHUB_TOKEN` permissions:
+
+```yaml
+permissions:
+  contents: write   # To create/update GitHub releases
+  packages: write   # To push OCI image artifacts to GHCR
+```

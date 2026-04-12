@@ -22,16 +22,6 @@ runs:
   using: composite
 
   steps:
-    - name: Install Carvel tools
-      shell: bash
-      run: curl -L https://carvel.dev/install.sh | bash
-
-    - name: Install Educates CLI
-      shell: bash
-      run: |
-        imgpkg pull -i ghcr.io/educates/educates-client-programs:3.3.2 -o /tmp/client-programs
-        mv /tmp/client-programs/educates-linux-amd64 /usr/local/bin/educates
-
     - name: Calculate release variables
       shell: bash
       run: |
@@ -43,15 +33,25 @@ runs:
 
     - name: Publish workshop and create workshop definition
       shell: bash
-      run : |
+      run: |
         mkdir -p ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources
-        educates publish-workshop '${{inputs.path}}' \
-          --workshop-file '${{inputs.workshop-resource-file}}' \
-          --export-workshop ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources/workshop.yaml \
-          --image-repository=ghcr.io/${REPOSITORY_OWNER} \
-          --workshop-version=${REPOSITORY_TAG} \
-          --registry-username=${{github.actor}} \
-          --registry-password=${{env.GITHUB_TOKEN}}
+        docker run --rm \
+          -v ${{github.workspace}}:/workspace \
+          -v ${{runner.temp}}:/tmp/output \
+          -v /etc/ssl/certs:/etc/ssl/certs:ro \
+          ghcr.io/educates/educates-cli:3.6.1 publish-workshop /workspace/${{inputs.path}} \
+            --workshop-file '${{inputs.workshop-resource-file}}' \
+            --export-workshop /tmp/output/workshops/${REPOSITORY_NAME}/resources/workshop.yaml \
+            --image-repository=ghcr.io/${REPOSITORY_OWNER} \
+            --workshop-version=${REPOSITORY_TAG} \
+            --registry-username=${{github.actor}} \
+            --registry-password=${{env.GITHUB_TOKEN}}
+
+        if [[ -f "${{inputs.path}}/${{inputs.trainingportal-resource-file}}" ]]; then
+          cp "${{inputs.path}}/${{inputs.trainingportal-resource-file}}" ${{runner.temp}}/workshops/${REPOSITORY_NAME}/resources/trainingportal.yaml
+        else
+          echo "::warning::TrainingPortal resource file '${{inputs.path}}/${{inputs.trainingportal-resource-file}}' not found. Skipping."
+        fi
 
     - name: Generate archives containing the workshop definition
       shell: bash
@@ -59,17 +59,17 @@ runs:
         (cd ${{runner.temp}}; tar cvfz workshops.tar.gz workshops)
         (cd ${{runner.temp}}; zip workshops.zip -r workshops)
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: workshop.yaml
         path: ${{runner.temp}}/workshops/${{env.REPOSITORY_NAME}}/resources/workshop.yaml
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: workshops.tar.gz
         path: ${{runner.temp}}/workshops.tar.gz
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: workshops.zip
         path: ${{runner.temp}}/workshops.zip
@@ -89,5 +89,4 @@ runs:
         files: |
           ${{runner.temp}}/workshops.tar.gz
           ${{runner.temp}}/workshops.zip
-          ${{runner.temp}}/workshops/${{env.REPOSITORY_NAME}}/resources/workshop.yaml
-          ${{inputs.path}}/${{inputs.trainingportal-resource-file}}
+          ${{runner.temp}}/workshops/${{env.REPOSITORY_NAME}}/resources/*.yaml
